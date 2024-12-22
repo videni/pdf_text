@@ -11,9 +11,10 @@ fn main() {
         let flow = pdf_text::run(&file, &page, &resolver, Default::default(), false).expect("can't render page");
 
         for run in flow.runs {
-            for line in run.lines {
-                for word in line.words {
-                    println!("{}", word.text.as_str());
+            for line in &run.lines {
+                println!("{:?}",  line.rect);
+                for word in &line.words {
+                    println!("{}, {:?}", word.text.as_str(), word.rect);
                     // for char in word.chars {
                     //     println!("{:?}", char);
                     // }

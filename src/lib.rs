@@ -21,7 +21,6 @@ pub fn run<B: Backend>(file: &pdf::file::CachedFile<B>, page: &Page, resolve: &i
     render_page(&mut tracer, resolve, &page, transform)?;
 
     let bbox = tracer.view_box();
-
     let items: Vec<DrawItem<OutlineBuilder>> = tracer.finish();
     //Get all patterns which may have lines and texts inside.
     let mut patterns = HashSet::new();

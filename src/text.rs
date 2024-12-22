@@ -10,7 +10,7 @@ use crate::{flow::{Char, Rect, Word}, util::avg};
 pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<Item=&'a TextSpan<E>> + Clone) -> Vec<Word> {
     let word_gap = analyze_word_gap(items.clone());
     let mut words = Vec::new();
-    let mut current_word = WordBuilder::new(out.len());
+    let mut current_word = WordBuilder::new(out.len(), 0.0);
     
     // Whether the last processed TextChar is a whitespace
     // ' '        Space
@@ -19,6 +19,8 @@ pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<I
     // '\r'       Carriage return
     // '\u{00A0}' Non-breaking space
     let mut trailing_space = out.chars().last().map_or(true, |c| c.is_whitespace());
+
+    let mut end = 0.; // trailing edge of the last char
 
     for span in items {
         let mut offset = 0;
@@ -42,27 +44,29 @@ pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<I
             
             let is_whitespace = text.chars().all(|c| c.is_whitespace());
 
-            // byte offset
+            // byte offsets
             let offset_increment = text.len();
             // Handle word boundaries
             if trailing_space && !is_whitespace {
                 // Start new word after space
-                current_word.start_new(out.len(), char_start);
+                current_word = WordBuilder::new(out.len(),char_start);
                 current_word.add_char(0, offset_increment, char_start, char_end);
+
                 out.extend(text.nfkc());
             } else if !trailing_space {
                 if is_whitespace {
                     // End word at space
-                    words.push(current_word.build(out, char_end));
-                    current_word = WordBuilder::new(out.len());
-                    out.push(' ');
-                } else if current.pos + x_off > current_word.end_pos + word_gap {
-                    // End word at large gap
-                    words.push(current_word.build(out, char_end));
+                    words.push(current_word.build(out));
 
-                    current_word = WordBuilder::new(out.len());
-                    current_word.start_new(out.len(), char_start);
+                    current_word = WordBuilder::new(out.len(),char_start);
+                    out.push(' ');
+                } else if current.pos + x_off > end + word_gap {
+                    // End word at large gap
+                    words.push(current_word.build(out));
+
+                    current_word = WordBuilder::new(out.len(), char_start);
                     current_word.add_char(0, offset_increment, char_start, char_end);
+
                     out.extend(text.nfkc());
                 } else {
                     // Continue current word
@@ -71,16 +75,17 @@ pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<I
                     out.extend(text.nfkc());
                 }
             }
-
             trailing_space = is_whitespace;
+
+            end = current.pos + x_off + current.width;
+
             current_word.update_bounds(span.rect.min_y(), span.rect.max_y());
         }
     }
 
     // Add final word if any
     if !current_word.is_empty() {
-        let end_pos = current_word.end_pos;
-        words.push(current_word.build(out, end_pos));
+        words.push(current_word.build(out));
     }
 
     words
@@ -92,33 +97,27 @@ struct WordBuilder {
 
     // For calculating the layout(position, width , height) of a word
     start_pos: f32,
-    end_pos: f32, // trailing edge of the last char
+    end_pos: f32, 
     y_min: f32,
     y_max: f32,
 
     chars: Vec<Char>,
     byte_offset: usize,
-    started: bool,
+    new: bool,
 }
 
 impl WordBuilder {
-    fn new(word_start_idx: usize) -> Self {
+    fn new(word_start_idx: usize, start_pos: f32) -> Self {
         Self {
             word_start_idx,
-            start_pos: 0.0,
+            start_pos,
             end_pos: 0.0,
             y_min: f32::INFINITY,
             y_max: -f32::INFINITY,
             chars: Vec::new(),
             byte_offset: 0,
-            started: false,
+            new: true,
         }
-    }
-
-    fn start_new(&mut self, word_start_idx: usize, start_pos: f32) {
-        self.word_start_idx = word_start_idx;
-        self.start_pos = start_pos;
-        self.started = true;
     }
 
     fn add_char(&mut self, offset: usize, offset_increment: usize, start: f32, end: f32) {
@@ -128,14 +127,16 @@ impl WordBuilder {
             width: end - start,
         });
         self.end_pos = end;
+
         self.byte_offset += offset_increment;
     }
 
     fn update_bounds(&mut self, min_y: f32, max_y: f32) {
-        if !self.started {
+        if self.new {
             self.y_min = min_y;
             self.y_max = max_y;
-            self.started = true;
+
+            self.new = false;
         } else {
             self.y_min = self.y_min.min(min_y);
             self.y_max = self.y_max.max(max_y);
@@ -146,23 +147,23 @@ impl WordBuilder {
         self.chars.is_empty()
     }
 
-    fn build(mut self, out: &str, end_pos: f32) -> Word {
+    fn build(mut self, out: &str) -> Word {
         Word {
             text: out[self.word_start_idx..].into(),
             rect: Rect {
                 x: self.start_pos,
                 y: self.y_min,
                 h: self.y_max - self.y_min,
-                w: end_pos - self.start_pos
+                w: self.end_pos - self.start_pos
             },
             chars: take(&mut self.chars)
         }
     }
 }
 
-/// Calculate gaps between each char,
+/// Calculate gaps between each char, the return value unit is em
+
 /// The most important thing here is to make sure the gap is bigger than char gap, and less than word gap.
-/// 
 /// for example: 
 /// think of something like "ab____________c de"
 /// 
@@ -186,7 +187,7 @@ fn analyze_word_gap<'a, E: Encoder + 'a>(items: impl Iterator<Item=&'a TextSpan<
     let gaps = items.clone()
         .flat_map(|s| {
             // the transform matrix is from em space to device space
-            // so we need to invert it
+            // so we need to invert it, becoming device space to em space
             let tr_inv = s.transform.matrix.inverse();
             let pos = (tr_inv * s.transform.vector).x();
 
