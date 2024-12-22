@@ -164,7 +164,6 @@ fn split<E: Encoder>(boxes: &mut [(RectF, usize)], spans: &[TextSpan<E>], lines:
     };
     let x_threshold = (max_gap * 0.5).max(1.0);
     let y_threshold = (max_gap * 0.5 / x_y_ratio).max(0.1);
-    let mut cells = vec![];
 
     let y_gaps: Vec<f32> = gaps(y_threshold, boxes, |r| (r.min_y(), r.max_y()))
         .collect();
@@ -187,6 +186,8 @@ fn split<E: Encoder>(boxes: &mut [(RectF, usize)], spans: &[TextSpan<E>], lines:
         "At least one of x_gaps and y_gaps must be non-empty, otherwise the memory will be exhausted"
     );
     sort_y(boxes);
+
+    let mut cells = vec![];
     for row in split_by(boxes, &y_gaps, |r| r.min_y()) {
         if x_gaps.len() > 0 {
             sort_x(row);

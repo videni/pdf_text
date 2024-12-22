@@ -91,6 +91,7 @@ pub fn run<B: Backend>(file: &pdf::file::CachedFile<B>, page: &Page, resolve: &i
     let root = node::build(&spans, bbox, &lines, without_header_and_footer);
 
     let mut flow = Flow::new();
+  
     flow::build(&mut flow, &spans, &root, bbox.min_x());
 
     Ok(flow)

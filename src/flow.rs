@@ -20,6 +20,7 @@ pub struct Word {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Char {
+    // Byte offset
     pub offset: usize,
     pub pos: f32,
     pub width: f32,
@@ -34,12 +35,6 @@ pub struct Line {
 pub struct Run {
     pub lines: Vec<Line>,
     pub kind: RunType,
-}
-
-impl Run {
-    pub fn rect(&self) -> Option<Rect> {
-        self.lines.iter().map(|s| s.rect).reduce(|a, b| a.union(b))
-    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -67,51 +62,6 @@ impl From<RectF> for Rect {
             y: r.origin_y(),
             w: r.width(),
             h: r.height()
-        }
-    }
-}
-
-impl Rect {
-    pub fn union(self, other: Rect) -> Rect {
-        let min_x = self.x.min(other.x);
-        let min_y = self.y.min(other.y);
-        let max_x = (self.x + self.w).max(other.x + other.w);
-        let max_y = (self.y + self.h).max(other.y + other.h);
-
-        Rect {
-            x: min_x,
-            y: min_y,
-            w: max_x - min_x,
-            h: max_y - min_y
-        }
-    }
-
-    pub fn intersects(self, other: Rect) -> bool {
-        let self_max_x = self.x + self.w;
-        let self_max_y = self.y + self.h;
-        
-        let other_max_x = other.x + other.w;
-        let other_max_y = other.y + other.h;
-
-        self.x < other_max_x && other.x < self_max_x && 
-        self.y < other_max_y && other.y < self_max_y
-    }
-
-    pub fn intersection(self, other: Rect) -> Option<Rect> {
-        if !self.intersects(other) {
-            None
-        } else {
-            let min_x = self.x.max(other.x);
-            let min_y = self.y.max(other.y);
-            let max_x = (self.x + self.w).min(other.x + other.w);
-            let max_y = (self.y + self.h).min(other.y + other.h);
-
-            Some(Rect {
-                x: min_x,
-                y: min_y,
-                w: max_x - min_x,
-                h: max_y - min_y
-            })
         }
     }
 }
@@ -197,7 +147,7 @@ pub(crate) fn build<E: Encoder>(mut flow: &mut Flow, spans: &[TextSpan<E>], node
                     let mut indices = vec![];
 
                     for n in cells {
-                        let start = indices.len();
+                        let start: usize = indices.len();
                         n.indices(&mut indices);
                         if indices.len() > start {
                             let cell_spans = indices[start..].iter().flat_map(|&i| spans.get(i));
@@ -228,7 +178,8 @@ pub(crate) fn build<E: Encoder>(mut flow: &mut Flow, spans: &[TextSpan<E>], node
                     }
                     //typically paragraphs are indented to the right and longer than 2 lines.
                     //then there will be a higher left count than right count.
-                    
+                    let indent = left > right;
+
                     // A paragraph with 3 lines, 3 cases:
                     // case 1: outdented(right > left, will get 3 runs)
                     // |-------
@@ -243,11 +194,9 @@ pub(crate) fn build<E: Encoder>(mut flow: &mut Flow, spans: &[TextSpan<E>], node
                     // |------
                     // |------
 
-                    // A paragraph with two lines starts at the same x? then left = right.
+                    //TODO: A paragraph with two lines starts at the same x? then left = right.
                     // the second line will be treated as as another run, but actually it should be in 
                     // in the same run.
-
-                    let indent = left > right;
 
                     let mut para_start = 0;
                     let mut line_start = 0;
@@ -256,7 +205,11 @@ pub(crate) fn build<E: Encoder>(mut flow: &mut Flow, spans: &[TextSpan<E>], node
                     let mut flow_lines = vec![];
                     for &(line_bbox, end) in lines.iter() {
                         if line_start != 0 {
-                            // if a line is indented (or outdented), it marks a new paragraph
+                            //Always add a line break for new line, which will be treated as whitespace in the concat_text method
+                            text.push('\n');
+
+                            // if a line is indented(indent = true) or outdented(indent = false), it marks a new paragraph
+                            // so here, save previous lines as a new run.
                             if (line_bbox.min_x() >= left_margin) == indent {
                                 flow.runs.push(Run {
                                     lines: take(&mut flow_lines),
@@ -267,8 +220,6 @@ pub(crate) fn build<E: Encoder>(mut flow: &mut Flow, spans: &[TextSpan<E>], node
                                 });
                                 para_start = line_start;
                             }
-                            //Always add a line break for new line, which will be treated as whitespace in the concat_text method
-                            text.push('\n');
                         }
                         if end > line_start {
                             let words = concat_text(&mut text, indices[line_start..end].iter().flat_map(|&i| spans.get(i)));

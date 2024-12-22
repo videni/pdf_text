@@ -42,11 +42,13 @@ pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<I
             
             let is_whitespace = text.chars().all(|c| c.is_whitespace());
 
+            // byte offset
+            let offset_increment = text.len();
             // Handle word boundaries
             if trailing_space && !is_whitespace {
                 // Start new word after space
                 current_word.start_new(out.len(), char_start);
-                current_word.add_char(0, char_start, char_end);
+                current_word.add_char(0, offset_increment, char_start, char_end);
                 out.extend(text.nfkc());
             } else if !trailing_space {
                 if is_whitespace {
@@ -60,11 +62,12 @@ pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<I
 
                     current_word = WordBuilder::new(out.len());
                     current_word.start_new(out.len(), char_start);
-                    current_word.add_char(0, char_start, char_end);
+                    current_word.add_char(0, offset_increment, char_start, char_end);
                     out.extend(text.nfkc());
                 } else {
                     // Continue current word
-                    current_word.add_char(current_word.char_count, char_start, char_end);
+                    current_word.add_char(current_word.byte_offset, offset_increment, char_start, char_end);
+
                     out.extend(text.nfkc());
                 }
             }
@@ -94,7 +97,7 @@ struct WordBuilder {
     y_max: f32,
 
     chars: Vec<Char>,
-    char_count: usize,
+    byte_offset: usize,
     started: bool,
 }
 
@@ -107,7 +110,7 @@ impl WordBuilder {
             y_min: f32::INFINITY,
             y_max: -f32::INFINITY,
             chars: Vec::new(),
-            char_count: 0,
+            byte_offset: 0,
             started: false,
         }
     }
@@ -118,14 +121,14 @@ impl WordBuilder {
         self.started = true;
     }
 
-    fn add_char(&mut self, offset: usize, start: f32, end: f32) {
+    fn add_char(&mut self, offset: usize, offset_increment: usize, start: f32, end: f32) {
         self.chars.push(Char {
             offset,
             pos: start,
             width: end - start,
         });
         self.end_pos = end;
-        self.char_count += 1;
+        self.byte_offset += offset_increment;
     }
 
     fn update_bounds(&mut self, min_y: f32, max_y: f32) {
