@@ -25,9 +25,11 @@ pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<I
     for span in items {
         let mut offset = 0;
         let tr_inv = span.transform.matrix.inverse();
+        // Device space to em space
         let x_off = (tr_inv * span.transform.vector).x();
-        
+
         let mut chars = span.chars.iter().peekable();
+
         while let Some(current) = chars.next() {
             // Get text for current char
             let text = if let Some(next) = chars.peek() {
@@ -38,41 +40,43 @@ pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<I
                 &span.text[offset..]
             };
 
-            // Calculate char positions
-            let char_start = (span.transform.matrix * Vector2F::new(current.pos + x_off, 0.0)).x();
-            let char_end = (span.transform.matrix * Vector2F::new(current.pos + x_off + current.width, 0.0)).x();
+            // Calculate char positions in device space
+            let char_start = (span.transform * Vector2F::new(current.pos, 0.0)).x();
+            let char_end = (span.transform * Vector2F::new(current.pos + current.width, 0.0)).x();
             
             let is_whitespace = text.chars().all(|c| c.is_whitespace());
-
+           
             // byte offsets
-            let offset_increment = text.len();
+            let bytes_offset = text.len();
             // Handle word boundaries
             if trailing_space && !is_whitespace {
                 // Start new word after space
                 current_word = WordBuilder::new(out.len(),char_start);
-                current_word.add_char(0, offset_increment, char_start, char_end);
+                current_word.add_char(bytes_offset, char_start, char_end);
 
-                out.extend(text.nfkc());
+                out.push_str(text);
             } else if !trailing_space {
                 if is_whitespace {
                     // End word at space
                     words.push(current_word.build(out));
 
-                    current_word = WordBuilder::new(out.len(),char_start);
                     out.push(' ');
+                    current_word = WordBuilder::new(out.len(),char_start);
                 } else if current.pos + x_off > end + word_gap {
+                  
                     // End word at large gap
                     words.push(current_word.build(out));
 
                     current_word = WordBuilder::new(out.len(), char_start);
-                    current_word.add_char(0, offset_increment, char_start, char_end);
+                    current_word.add_char(bytes_offset, char_start, char_end);
 
-                    out.extend(text.nfkc());
+                    out.push_str(text);
                 } else {
                     // Continue current word
-                    current_word.add_char(current_word.byte_offset, offset_increment, char_start, char_end);
+                    current_word.add_char(bytes_offset, char_start, char_end);
 
-                    out.extend(text.nfkc());
+                    // out.extend(text.nfkc()); // nfkc will change the bytes length of a char.
+                    out.push_str(text);
                 }
             }
             trailing_space = is_whitespace;
@@ -102,7 +106,9 @@ struct WordBuilder {
     y_max: f32,
 
     chars: Vec<Char>,
-    byte_offset: usize,
+    bytes_offset: usize,
+
+    // New word
     new: bool,
 }
 
@@ -115,20 +121,20 @@ impl WordBuilder {
             y_min: f32::INFINITY,
             y_max: -f32::INFINITY,
             chars: Vec::new(),
-            byte_offset: 0,
+            bytes_offset: 0,
             new: true,
         }
     }
 
-    fn add_char(&mut self, offset: usize, offset_increment: usize, start: f32, end: f32) {
+    fn add_char(&mut self, bytes_offset: usize, start: f32, end: f32) {
         self.chars.push(Char {
-            offset,
+            offset: self.bytes_offset,
             pos: start,
             width: end - start,
         });
         self.end_pos = end;
 
-        self.byte_offset += offset_increment;
+        self.bytes_offset += bytes_offset;
     }
 
     fn update_bounds(&mut self, min_y: f32, max_y: f32) {
@@ -248,6 +254,32 @@ mod tests {
         assert_eq!(output, "hello world");
 
         // Assert the words
-        assert_eq!(words.len(), 2); // Expect two words: "hello" and "world"
+        // Expect two words: "hello" and "world"
+        assert_eq!(words.len(), 2); 
+        assert_eq!(words[0].text, "hello");
+        assert_eq!(words[1].text, "world");
+
+        // Assert chars positions
+        for w in words {
+            let text = &w.text;
+            let mut offset = 0;
+            
+            let mut texts = vec![];
+
+            let mut chars = w.chars.iter().peekable();
+
+            while let Some(_) = chars.next() {
+                // Get text for current char
+                let s = if let Some(next) = chars.peek() {
+                    let s = &text[offset..next.offset];
+                    offset = next.offset;
+                    s
+                } else {
+                    &text[offset..]
+                };
+
+                texts.push(s);
+            }
+        }
     }
 }
