@@ -25,17 +25,9 @@ pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<I
     for span in items {
         let mut offset = 0;
         let tr_inv = span.transform.matrix.inverse();
-        // Device space to em space
         let x_off = (tr_inv * span.transform.vector).x();
-
+        
         let mut chars = span.chars.iter().peekable();
-
-        if out.contains("Oct") {
-            println!(" ");
-            println!(" ");
-            println!("{:?}", span);
-            println!(" ");
-        }
         while let Some(current) = chars.next() {
             // Get text for current char
             let text = if let Some(next) = chars.peek() {
@@ -46,17 +38,9 @@ pub fn concat_text<'a, E: Encoder + 'a>(out: &mut String, items: impl Iterator<I
                 &span.text[offset..]
             };
 
-            // Calculate char positions in device space
+            // Calculate char positions
             let char_start = (span.transform.matrix * Vector2F::new(current.pos + x_off, 0.0)).x();
             let char_end = (span.transform.matrix * Vector2F::new(current.pos + x_off + current.width, 0.0)).x();
-
-            if out.contains("Oct") {
-                println!("  {:?} - {:?} ,{:?} ,{:?}", text, current, char_start, char_end);
-                println!("  ");
-                println!("  {:?} {:?} ,{:?} ,{:?}", tr_inv, span.transform.vector, tr_inv * span.transform.vector, x_off);
-    
-                // std::process::exit(1);
-            }
             
             let is_whitespace = text.chars().all(|c| c.is_whitespace());
 
@@ -119,8 +103,6 @@ struct WordBuilder {
 
     chars: Vec<Char>,
     byte_offset: usize,
-
-    // New word
     new: bool,
 }
 

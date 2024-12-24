@@ -11,19 +11,13 @@ fn main() {
         let flow = pdf_text::run(&file, &page, &resolver, Default::default(), false).expect("can't render page");
 
         for run in flow.runs {
-            for (i, line) in run.lines.iter().enumerate() {
-                let text = line.words.iter().map(|w| &w.text).format(" ").to_string();
-
-                if text.contains("ct 2") {
-                    println!(" ");
-                    println!("*{}, {}, {:?}",  i, text.as_str(), line.rect);
-                    for w in &line.words {
-                        println!(" ");
-                        println!("{}, {:?}", w.text.as_str(), w.rect);
-                        for c in &w.chars {
-                            println!("{:?}", c);
-                        }
-                    }
+            for line in &run.lines {
+                println!("{:?}",  line.rect);
+                for word in &line.words {
+                    println!("{}, {:?}", word.text.as_str(), word.rect);
+                    // for char in word.chars {
+                    //     println!("{:?}", char);
+                    // }
                 }
             }
         }
