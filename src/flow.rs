@@ -223,7 +223,6 @@ pub(crate) fn build<E: Encoder>(mut flow: &mut Flow, spans: &[TextSpan<E>], node
                         }
                         if end > line_start {
                             let words = concat_text(&mut text, indices[line_start..end].iter().flat_map(|&i| spans.get(i)));
-
                             if words.len() > 0 {
                                 flow_lines.push(Line { words , rect: line_bbox.into()});
                             }
