@@ -18,7 +18,7 @@ pub fn run<B: Backend>(file: &pdf::file::CachedFile<B>, page: &Page, resolve: &i
     let mut tracer = Tracer::new(&mut cache, &mut clip_paths);
 
     //Get text, pattern, image by the Tracer backend.
-    render_page(&mut tracer, resolve, &page, transform)?;
+    render_page(&mut tracer, resolve, page, transform)?;
 
     let bbox = tracer.view_box();
     let items: Vec<DrawItem<OutlineBuilder>> = tracer.finish();

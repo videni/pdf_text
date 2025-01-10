@@ -10,21 +10,17 @@ description = "PDF text extraction"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 
-[dependencies.pdf]
-default-features=false 
-features = ["cache", "dump"]
-git = "https://github.com/pdf-rs/pdf"
-
 [dependencies]
-# pdf_render= { git = "https://github.com/videni/pdf_render_with_vello.git", branch="vello_wip"}
-pdf_render= { path = "../pdf_render/render"}
+pdf_render= { git = "https://github.com/videni/pdf_render_with_vello.git", branch="vello_wip"}
+# pdf_render= { path = "../pdf_render/render"}
+pdf = { git = "https://github.com/pdf-rs/pdf", features = ["cache", "dump"], default-features = false, rev = "9002322822a3773d3d265dee81d855b40f5e0d0a"}
 
 itertools = "*"
 log = "*"
 ordered-float = "*"
 serde = { version = "*", features = ["derive"] }
 unicode-normalization = "0.1.19"
-font = { git = "https://github.com/pdf-rs/font", branch = "vello", features=['cff']}
+font = { git = "https://github.com/videni/font", branch = "master", features=['cff']}
 
 pathfinder_geometry = { git = "https://github.com/servo/pathfinder" }
 pathfinder_color = { git = "https://github.com/servo/pathfinder" }
